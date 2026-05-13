@@ -1,0 +1,316 @@
+{
+  "doctors": [
+    {
+      "id": "1",
+      "name": "Safdor Meliyeva Feruza Mexriddinovna",
+      "specialization": "Tibbiy ro'yxatchi",
+      "room": "201-xona",
+      "currentQueue": 36,
+      "nextAvailable": "12:15",
+      "status": "available",
+      "phone": "+998 71 234 56 84",
+      "icon": "📝"
+    },
+    {
+      "id": "2",
+      "name": "Kapitan Sharapova Dilafruz Safarovna",
+      "specialization": "XTK raisi",
+      "room": "203-xona",
+      "currentQueue": 15,
+      "nextAvailable": "11:20",
+      "status": "available",
+      "phone": "+998 71 234 56 85",
+      "icon": "👩‍⚖️"
+    },
+    {
+      "id": "3",
+      "name": "Kapitan Azimova Gulchexra Abduvaxidovna",
+      "specialization": "Oftalmolog",
+      "room": "103-xona",
+      "currentQueue": 2,
+      "nextAvailable": "10:45",
+      "status": "busy",
+      "phone": "+998 71 234 56 79",
+      "icon": "👁️"
+    },
+    {
+      "id": "4",
+      "name": "Kapitan Qodirov Po'latjon Babajanovich",
+      "specialization": "Otolaringolog",
+      "room": "303-xona",
+      "currentQueue": 3,
+      "nextAvailable": "11:25",
+      "status": "available",
+      "phone": "+998 71 234 56 91",
+      "icon": "👂"
+    },
+    {
+      "id": "5",
+      "name": "Kapitan Sultonov Eldor Ibragimovich",
+      "specialization": "Dermatovenerolog",
+      "room": "301-xona",
+      "currentQueue": 11,
+      "nextAvailable": "11:40",
+      "status": "available",
+      "phone": "+998 71 234 56 89",
+      "icon": "🔍"
+    },
+    {
+      "id": "6",
+      "name": "Mayor Abdukarimov Abdushukur Abdurayimovich",
+      "specialization": "Jarroh",
+      "room": "204-xona",
+      "currentQueue": 7,
+      "nextAvailable": "10:50",
+      "status": "available",
+      "phone": "+998 71 234 56 86",
+      "icon": "🔪"
+    },
+    {
+      "id": "7",
+      "name": "Mayor Tursunova Muzayyam Olimovna",
+      "specialization": "Nevrolog",
+      "room": "302-xona",
+      "currentQueue": 6,
+      "nextAvailable": "11:10",
+      "status": "available",
+      "phone": "+998 71 234 56 90",
+      "icon": "⚡"
+    },
+    {
+      "id": "8",
+      "name": "Terapevt",
+      "specialization": "Ichki kasalliklar bo'yicha umumiy diagnostika va ekspertiza",
+      "room": "304-xona",
+      "currentQueue": 4,
+      "nextAvailable": "12:00",
+      "status": "available",
+      "phone": "+998 71 234 56 92",
+      "icon": "❤️"
+    },
+    {
+      "id": "9",
+      "name": "Katta leytenant Tuxtayeva Nargiza Erkin qizi",
+      "specialization": "Psixiatr",
+      "room": "305-xona",
+      "currentQueue": 2,
+      "nextAvailable": "10:40",
+      "status": "available",
+      "phone": "+998 71 234 56 93",
+      "icon": "💭"
+    },
+    {
+      "id": "10",
+      "name": "Mayor Mironova Tatyana Yur'evna",
+      "specialization": "PFL",
+      "room": "205-xona",
+      "currentQueue": 5,
+      "nextAvailable": "10:35",
+      "status": "busy",
+      "phone": "+998 71 234 56 87",
+      "icon": "🧠"
+    }
+  ],
+  "queue": [
+    {
+      "id": "1764130626837",
+      "ticketNumber": 2,
+      "doctorName": "Mayor Mironova Tatyana Yur'evna",
+      "specialization": "PFL",
+      "room": "205-xona",
+      "status": "in-progress",
+      "estimatedWait": "10 daqiqa",
+      "timestamp": "09:17:08"
+    },
+    {
+      "id": "1764579938512",
+      "ticketNumber": 3,
+      "doctorName": "Mayor Tursunova Muzayyam Olimovna",
+      "specialization": "Nevrolog",
+      "room": "302-xona",
+      "status": "in-progress",
+      "estimatedWait": "10 daqiqa",
+      "timestamp": "14:05:40"
+    },
+    {
+      "id": "1765507369785",
+      "ticketNumber": 2,
+      "doctorName": "Kapitan Azimova Gulchexra Abduvaxidovna",
+      "specialization": "Oftalmolog",
+      "room": "103-xona",
+      "status": "in-progress",
+      "estimatedWait": "10 daqiqa",
+      "timestamp": "07:42:50"
+    },
+    {
+      "id": "1765507379664",
+      "ticketNumber": 4,
+      "doctorName": "Mayor Tursunova Muzayyam Olimovna",
+      "specialization": "Nevrolog",
+      "room": "302-xona",
+      "status": "waiting",
+      "estimatedWait": "10 daqiqa",
+      "timestamp": "07:43:00"
+    },
+    {
+      "id": "1765507395979",
+      "ticketNumber": 2,
+      "doctorName": "Kapitan Qodirov Po'latjon Babajanovich",
+      "specialization": "Otolaringolog",
+      "room": "303-xona",
+      "status": "waiting",
+      "estimatedWait": "10 daqiqa",
+      "timestamp": "07:43:17"
+    },
+    {
+      "id": "1765507401682",
+      "ticketNumber": 6,
+      "doctorName": "Mayor Abdukarimov Abdushukur Abdurayimovich",
+      "specialization": "Jarroh",
+      "room": "204-xona",
+      "status": "waiting",
+      "estimatedWait": "10 daqiqa",
+      "timestamp": "07:43:23"
+    },
+    {
+      "id": "1765507407351",
+      "ticketNumber": 1,
+      "doctorName": "Terapevt",
+      "specialization": "Ichki kasalliklar bo'yicha umumiy diagnostika va ekspertiza",
+      "room": "304-xona",
+      "status": "waiting",
+      "estimatedWait": "10 daqiqa",
+      "timestamp": "07:43:28"
+    },
+    {
+      "id": "1765507412482",
+      "ticketNumber": 3,
+      "doctorName": "Mayor Mironova Tatyana Yur'evna",
+      "specialization": "PFL",
+      "room": "205-xona",
+      "status": "waiting",
+      "estimatedWait": "10 daqiqa",
+      "timestamp": "07:43:33"
+    },
+    {
+      "id": "1765526889306",
+      "ticketNumber": 4,
+      "doctorName": "Mayor Mironova Tatyana Yur'evna",
+      "specialization": "PFL",
+      "room": "205-xona",
+      "status": "waiting",
+      "estimatedWait": "10 daqiqa",
+      "timestamp": "13:08:11"
+    },
+    {
+      "id": "1765526976493",
+      "ticketNumber": 2,
+      "doctorName": "Terapevt",
+      "specialization": "Ichki kasalliklar bo'yicha umumiy diagnostika va ekspertiza",
+      "room": "304-xona",
+      "status": "waiting",
+      "estimatedWait": "10 daqiqa",
+      "timestamp": "13:09:37"
+    },
+    {
+      "id": "1765526994027",
+      "ticketNumber": 1,
+      "doctorName": "Katta leytenant Tuxtayeva Nargiza Erkin qizi",
+      "specialization": "Psixiatr",
+      "room": "305-xona",
+      "status": "in-progress",
+      "estimatedWait": "10 daqiqa",
+      "timestamp": "13:09:55"
+    },
+    {
+      "id": "1765773357571",
+      "ticketNumber": 3,
+      "doctorName": "Terapevt",
+      "specialization": "Ichki kasalliklar bo'yicha umumiy diagnostika va ekspertiza",
+      "room": "304-xona",
+      "status": "waiting",
+      "estimatedWait": "10 daqiqa",
+      "timestamp": "09:35:58"
+    },
+    {
+      "id": "1765773371040",
+      "ticketNumber": 4,
+      "doctorName": "Terapevt",
+      "specialization": "Ichki kasalliklar bo'yicha umumiy diagnostika va ekspertiza",
+      "room": "304-xona",
+      "status": "waiting",
+      "estimatedWait": "10 daqiqa",
+      "timestamp": "09:36:12"
+    },
+    {
+      "id": "1766114447886",
+      "ticketNumber": 3,
+      "doctorName": "Kapitan Qodirov Po'latjon Babajanovich",
+      "specialization": "Otolaringolog",
+      "room": "303-xona",
+      "status": "waiting",
+      "estimatedWait": "10 daqiqa",
+      "timestamp": "08:20:49"
+    },
+    {
+      "id": "1766114550453",
+      "ticketNumber": 5,
+      "doctorName": "Mayor Tursunova Muzayyam Olimovna",
+      "specialization": "Nevrolog",
+      "room": "302-xona",
+      "status": "waiting",
+      "estimatedWait": "10 daqiqa",
+      "timestamp": "08:22:31"
+    },
+    {
+      "id": "1767767913724",
+      "ticketNumber": 7,
+      "doctorName": "Mayor Abdukarimov Abdushukur Abdurayimovich",
+      "specialization": "Jarroh",
+      "room": "204-xona",
+      "status": "waiting",
+      "estimatedWait": "10 daqiqa",
+      "timestamp": "11:38:39"
+    },
+    {
+      "id": "1767848791276",
+      "ticketNumber": 6,
+      "doctorName": "Mayor Tursunova Muzayyam Olimovna",
+      "specialization": "Nevrolog",
+      "room": "302-xona",
+      "status": "waiting",
+      "estimatedWait": "10 daqiqa",
+      "timestamp": "10:06:33"
+    },
+    {
+      "id": "1767930880099",
+      "ticketNumber": 36,
+      "doctorName": "Safdor Meliyeva Feruza Mexriddinovna",
+      "specialization": "Tibbiy ro'yxatchi",
+      "room": "201-xona",
+      "status": "in-progress",
+      "estimatedWait": "10 daqiqa",
+      "timestamp": "08:54:41"
+    },
+    {
+      "id": "1768281651789",
+      "ticketNumber": 5,
+      "doctorName": "Mayor Mironova Tatyana Yur'evna",
+      "specialization": "PFL",
+      "room": "205-xona",
+      "status": "waiting",
+      "estimatedWait": "10 daqiqa",
+      "timestamp": "10:20:58"
+    },
+    {
+      "id": "1768306002135",
+      "ticketNumber": 2,
+      "doctorName": "Katta leytenant Tuxtayeva Nargiza Erkin qizi",
+      "specialization": "Psixiatr",
+      "room": "305-xona",
+      "status": "waiting",
+      "estimatedWait": "10 daqiqa",
+      "timestamp": "17:06:45"
+    }
+  ]
+}
