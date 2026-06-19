@@ -2,10 +2,23 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Star, Award, Laptop } from "lucide-react";
+import { Star, Award, Laptop, Users } from "lucide-react";
 
 export default function Information() {
+  const searchParams = useSearchParams();
+  const buildingId = searchParams.get("building_id");
+  const kioskId = searchParams.get("kiosk_id");
+
+  const buildQuery = (path: string) => {
+    const params = new URLSearchParams();
+    if (buildingId) params.set("building_id", buildingId);
+    if (kioskId) params.set("kiosk_id", kioskId);
+    const qs = params.toString();
+    return qs ? `${path}?${qs}` : path;
+  };
+
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isMounted, setIsMounted] = useState(false);
 
@@ -136,9 +149,9 @@ export default function Information() {
           </div>
 
           {/* Features Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <Link
-              href="/doctors"
+              href={buildQuery("/doctors")}
               className="group bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-3xl p-8 hover:shadow-2xl hover:-translate-y-2 hover:border-blue-500/50 transition-all duration-300 text-center no-underline"
             >
               <div className="w-20 h-20 bg-linear-to-br from-blue-900 to-blue-600 rounded-2xl flex items-center justify-center text-white text-2xl shadow-lg mx-auto mb-6 group-hover:scale-110 transition-transform duration-300">
@@ -154,7 +167,7 @@ export default function Information() {
             </Link>
 
             <Link
-              href="/technologies"
+              href={buildQuery("/technologies")}
               className="group bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-3xl p-8 hover:shadow-2xl hover:-translate-y-2 hover:border-blue-500/50 transition-all duration-300 text-center no-underline"
             >
               <div className="w-20 h-20 bg-linear-to-br from-blue-900 to-blue-600 rounded-2xl flex items-center justify-center text-white text-2xl shadow-lg mx-auto mb-6 group-hover:scale-110 transition-transform duration-300">
@@ -165,6 +178,21 @@ export default function Information() {
               </h3>
               <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
                 Eng so&apos;nggi tibbiy asbob-uskunalar va diagnostika tizimlari
+              </p>
+            </Link>
+
+            <Link
+              href={buildQuery("/leaders")}
+              className="group bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-3xl p-8 hover:shadow-2xl hover:-translate-y-2 hover:border-blue-500/50 transition-all duration-300 text-center no-underline"
+            >
+              <div className="w-20 h-20 bg-linear-to-br from-blue-900 to-blue-600 rounded-2xl flex items-center justify-center text-white text-2xl shadow-lg mx-auto mb-6 group-hover:scale-110 transition-transform duration-300">
+                <Users className="w-8 h-8" />
+              </div>
+              <h3 className="text-2xl font-black text-slate-900 dark:text-white mb-4">
+                Rahbariyat
+              </h3>
+              <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
+                Bo&apos;lim rahbariyati va mutasaddi xodimlar haqida ma&apos;lumot
               </p>
             </Link>
           </div>

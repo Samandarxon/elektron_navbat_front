@@ -7,7 +7,9 @@ export default function InactivityHandler({ timeout = 5 * 60 * 1000 }) {
   const router = useRouter();
   const pathname = usePathname(); // joriy URL pathini olish
   const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const callHome = ["/queueDisplay", "/doctor-management", "/doctor"];
+  // Bu sahifalar passiv/maxsus ekranlar — inactivity bo'yicha bosh sahifaga
+  // qaytarilmasin (devorga osilgan display, doktor ekrani va h.k.).
+  const callHome = ["/display", "/queueDisplay", "/doctor-management", "/doctor"];
 
   useEffect(() => {
     // Agar joriy sahifa /queueDisplay bo‘lsa, qaytish funksiyasi ishlamasin

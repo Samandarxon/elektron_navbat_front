@@ -29,6 +29,7 @@ import {
 } from "@/app/lib/api/doctors";
 import { usePolling } from "@/hooks/usePolling";
 import { useQueue } from "@/contexts/queueContext";
+import { isKioskLoggedIn } from "@/app/lib/api/auth";
 
 export default function DoctorPage() {
   const params = useParams();
@@ -41,13 +42,16 @@ export default function DoctorPage() {
 const [lastCalledPatient, setLastCalledPatient] = useState<DisplayTicket | null>(null);
 
 
+  const authed = isKioskLoggedIn();
   const { data: doctors = [], loading: doctorsLoading } = usePolling(
     getDoctorsWithPolling,
-    3000
+    30000,
+    { enabled: authed }
   );
   const { data: allQueue = [], loading: queueLoading } = usePolling(
     getQueueWithPolling,
-    3000
+    30000,
+    { enabled: authed }
   );
 
   // Move all state updates to useEffect
@@ -77,6 +81,7 @@ const [lastCalledPatient, setLastCalledPatient] = useState<DisplayTicket | null>
   }, []);
 
   const loadDoctorData = async () => {
+    if (!isKioskLoggedIn()) { return; }
     try {
       setLoading(true);
       const [doctorsData, queueData] = await Promise.all([

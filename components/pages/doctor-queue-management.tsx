@@ -31,6 +31,7 @@ import {
   type Doctor,
   type DisplayTicket,
 } from "@/app/lib/api/doctors";
+import { isKioskLoggedIn } from "@/app/lib/api/auth";
 
 export default function DoctorQueueManagement() {
   const [doctors, setDoctors] = useState<Doctor[]>([]);
@@ -41,8 +42,9 @@ export default function DoctorQueueManagement() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
-  const { data: doctorsPoll = [], loading: doctorsLoading } = usePolling(getDoctorsWithPolling, 3000);
-  const { data: queuePoll = [], loading: queueLoading } = usePolling(getQueueWithPolling, 3000);
+  const authed = isKioskLoggedIn();
+  const { data: doctorsPoll = [], loading: doctorsLoading } = usePolling(getDoctorsWithPolling, 30000, { enabled: authed });
+  const { data: queuePoll = [], loading: queueLoading } = usePolling(getQueueWithPolling, 30000, { enabled: authed });
   
   // Move setLoading inside useEffect to prevent re-render loop
   useEffect(() => {

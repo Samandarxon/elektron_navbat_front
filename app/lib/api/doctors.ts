@@ -1,7 +1,18 @@
 // app/lib/api/doctors.ts
 // Navbat backend bilan ishlash uchun API client
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://25.1.1.129:8085";
+import { fetchWithAuth } from "./fetchWithAuth";
+import { getRuntimeEnv } from "@/lib/runtime-env";
+
+function throwIfUnauth(res: Response): void {
+  if (res.status === 401 || res.status === 403) {
+    const e = new Error("Autentifikatsiya talab qilinadi");
+    e.name = "AuthError";
+    throw e;
+  }
+}
+
+const API_URL = getRuntimeEnv().API_URL;
 
 // ─────────────────────────────────────────────────────────────
 // Backend raw types
@@ -58,7 +69,17 @@ function adaptDoctor(d: BackendDoctor): Doctor {
 // Doktorlar API
 // ─────────────────────────────────────────────────────────────
 export async function getDoctors(): Promise<Doctor[]> {
-  const res = await fetch(`${API_URL}/api/v1/doctors/active`);
+  const res = await fetchWithAuth(`${API_URL}/api/v1/doctors/active`);
+  throwIfUnauth(res);
+  if (!res.ok) throw new Error("Doktorlarni olishda xatolik");
+  const json = await res.json();
+  const list: BackendDoctor[] = json?.data?.doctors ?? json?.doctors ?? [];
+  return list.map(adaptDoctor);
+}
+
+export async function getDoctorsByBuilding(buildingId: string): Promise<Doctor[]> {
+  const res = await fetchWithAuth(`${API_URL}/api/v1/buildings/${buildingId}/doctors`);
+  throwIfUnauth(res);
   if (!res.ok) throw new Error("Doktorlarni olishda xatolik");
   const json = await res.json();
   const list: BackendDoctor[] = json?.data?.doctors ?? json?.doctors ?? [];
@@ -85,14 +106,18 @@ export interface CreatedTicket {
 
 export async function addToQueue(params: {
   doctor_id: string;
+  kiosk_id?: string;
+  building_id?: string;
   is_priority?: boolean;
   notes?: string;
 }): Promise<CreatedTicket> {
-  const res = await fetch(`${API_URL}/api/v1/queue/tickets`, {
+  const res = await fetchWithAuth(`${API_URL}/api/v1/queue/tickets`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       doctor_id: params.doctor_id,
+      kiosk_id: params.kiosk_id || undefined,
+      building_id: params.building_id || undefined,
       is_priority: params.is_priority ?? false,
       notes: params.notes ?? "",
     }),
@@ -119,6 +144,8 @@ export interface DisplayTicket {
   status: "waiting" | "in-progress";
   estimatedWait: string;
   timestamp: string;
+  buildingId?: string;
+  calledAt?: string;     // oxirgi chaqirilgan vaqt — recall (qayta chaqirish) ni aniqlash uchun
 }
 
 export function backendStatusToDisplay(s: string): "waiting" | "in-progress" {
@@ -143,13 +170,20 @@ export function adaptTicket(t: any): DisplayTicket {
     timestamp: t.created_at
       ? new Date(t.created_at).toLocaleTimeString("uz-UZ")
       : new Date().toLocaleTimeString("uz-UZ"),
+    buildingId: t.building_id ?? undefined,
+    calledAt: t.called_at ?? t.updated_at ?? undefined,
   };
 }
 
 // Faol ticketlarni olish (display ekran uchun)
 // GET /api/v1/queue/tickets/active — public endpoint
-export async function getQueue(): Promise<DisplayTicket[]> {
-  const res = await fetch(`${API_URL}/api/v1/queue/tickets/active`);
+export async function getQueue(buildingId?: string): Promise<DisplayTicket[]> {
+  const params = new URLSearchParams();
+  if (buildingId) params.set("building_id", buildingId);
+  const qs = params.toString();
+  const url = `${API_URL}/api/v1/queue/tickets/active${qs ? `?${qs}` : ""}`;
+  const res = await fetchWithAuth(url);
+  throwIfUnauth(res);
   if (!res.ok) throw new Error("Navbatlarni olishda xatolik");
   const json = await res.json();
   const tickets: any[] = json?.data?.tickets ?? json?.tickets ?? [];

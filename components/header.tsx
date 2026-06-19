@@ -2,7 +2,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useState, useEffect } from "react";
 import {
   Sun,
@@ -21,8 +21,38 @@ import { Button } from "./ui/button";
 
 export function Header() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [buildingId, setBuildingId] = useState("");
+  const [kioskId, setKioskId] = useState("");
+
+  useEffect(() => {
+    // URL params ustuvor, keyin localStorage
+    const urlBuilding = searchParams.get("building_id");
+    const urlKiosk = searchParams.get("kiosk_id");
+    if (urlBuilding) {
+      setBuildingId(urlBuilding);
+      setKioskId(urlKiosk || "");
+    } else {
+      try {
+        const cfg = localStorage.getItem("kioskConfig");
+        if (cfg) {
+          const parsed = JSON.parse(cfg);
+          setBuildingId(parsed.buildingId || "");
+          setKioskId(parsed.kioskCode || "");
+        }
+      } catch { /* ignore */ }
+    }
+  }, [searchParams]);
+
+  const buildQuery = (path: string) => {
+    const params = new URLSearchParams();
+    if (buildingId) params.set("building_id", buildingId);
+    if (kioskId) params.set("kiosk_id", kioskId);
+    const qs = params.toString();
+    return qs ? `${path}?${qs}` : path;
+  };
 
   useEffect(() => {
     const savedTheme = localStorage.getItem("theme") as "light" | "dark" | null;
@@ -42,30 +72,30 @@ export function Header() {
   };
 
   const mainNavLinks = [
-    { href: "/information", label: "Bosh sahifa", icon: Home },
-    { href: "/leaders", label: "Rahbariyat", icon: Users },
-    { href: "/process", label: "Bosqichlar", icon: ClipboardList },
-    { href: "/doctors", label: "Shifokorlar", icon: Stethoscope },
+    { path: "/information", label: "Bosh sahifa", icon: Home },
+    { path: "/leaders", label: "Rahbariyat", icon: Users },
+    { path: "/process", label: "Bosqichlar", icon: ClipboardList },
+    { path: "/doctors", label: "Shifokorlar", icon: Stethoscope },
   ];
 
   const mobileNavLinks = [
     ...mainNavLinks,
-    { href: "/services", label: "Xizmatlar", icon: Building },
-    { href: "/faq", label: "FAQ", icon: HelpCircle },
-    { href: "/contact", label: "Aloqa", icon: Phone },
+    { path: "/services", label: "Xizmatlar", icon: Building },
+    { path: "/faq", label: "FAQ", icon: HelpCircle },
+    { path: "/contact", label: "Aloqa", icon: Phone },
   ];
 
-  const isActive = (href: string) => {
-    if (href === "/") return pathname === "/";
-    return pathname.startsWith(href);
+  const isActive = (path: string) => {
+    if (path === "/") return pathname === "/";
+    return pathname.startsWith(path);
   };
 
   const path = usePathname()
-  const hiddenPaths = ["/", "/elektronNavbat", "/queueDisplay/"];
+  const hiddenPaths = ["/", "/elektronNavbat", "/queueDisplay", "/login"];
 
   return (
     <>
-      {!hiddenPaths.includes(path) && (
+      {!hiddenPaths.some((p) => path === p || path.startsWith(p + "/")) && (
         <header className="fixed w-full top-0 z-50 bg-background/95 backdrop-blur-xl border-b">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center h-20">
@@ -96,11 +126,11 @@ export function Header() {
               <nav className="hidden lg:flex items-center gap-2">
                 {mainNavLinks.map((link) => {
                   const Icon = link.icon;
-                  const active = isActive(link.href);
+                  const active = isActive(link.path);
                   return (
                     <Link
-                      key={link.href}
-                      href={link.href}
+                      key={link.path}
+                      href={buildQuery(link.path)}
                       className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition-all duration-300 relative group rounded-lg ${
                         active
                           ? "text-primary bg-primary/10"
@@ -176,11 +206,11 @@ export function Header() {
                 <div className="space-y-2">
                   {mobileNavLinks.map((link) => {
                     const Icon = link.icon;
-                    const active = isActive(link.href);
+                    const active = isActive(link.path);
                     return (
                       <Link
-                        key={link.href}
-                        href={link.href}
+                        key={link.path}
+                        href={buildQuery(link.path)}
                         onClick={() => setMobileMenuOpen(false)}
                         className={`flex items-center gap-4 p-4 rounded-xl transition-all duration-300 group ${
                           active

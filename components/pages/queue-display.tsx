@@ -18,15 +18,43 @@ import {
   WifiOff,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useQueue } from "@/contexts/queueContext";
-import type { DisplayTicket } from "@/app/lib/api/doctors";
+import { type DisplayTicket } from "@/app/lib/api/doctors";
 
 export default function QueueDisplay() {
+  const router = useRouter();
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [currentTime, setCurrentTime] = useState(new Date());
   const [lastUpdate, setLastUpdate] = useState(new Date());
+  const [audioUnlocked, setAudioUnlocked] = useState(false);
 
-  // Context dan hamma kerakli ma'lumotlar
+  // Brauzer autoplay siyosatini ochish — foydalanuvchi bitta klik qilishi shart.
+  // Aks holda monitorda navbat chaqirilganda ovoz chiqmaydi.
+  const unlockAudio = () => {
+    try {
+      const ctx = new (window.AudioContext ||
+        (window as any).webkitAudioContext)();
+      const buf = ctx.createBuffer(1, 1, 22050);
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.connect(ctx.destination);
+      src.start(0);
+      ctx.resume();
+      // HTMLAudioElement ni ham klik paytida "ochib" qo'yamiz
+      const warmup = new Audio();
+      warmup.muted = true;
+      warmup.play().catch(() => {});
+    } catch {
+      /* AudioContext mavjud bo'lmasa ham klik o'zi autoplay ni ochadi */
+    }
+    setAudioUnlocked(true);
+  };
+
+  // Active ticketlar va chaqiruv (animatsiya + audio) endi to'liq WebSocket orqali
+  // keladi (queueContext): ulanishda QUEUE_SNAPSHOT, keyin TICKET_* eventlari.
+  // Chaqiruv animatsiyasi TICKET_CALLED kelganda context'da triggerlanadi.
+  // Bu yerda HTTP polling YO'Q.
   const {
     currentCall,
     showModal,
@@ -34,6 +62,7 @@ export default function QueueDisplay() {
     tickets,
     isConnected,
     loadingTickets,
+    wsAuthError,
   } = useQueue();
 
   // Navbatni status bo'yicha ajratish
@@ -79,6 +108,30 @@ export default function QueueDisplay() {
     [waitingQueues, inProgressQueues]
   );
 
+  if (wsAuthError) {
+    return (
+      <div className="min-h-screen bg-gray-950 flex items-center justify-center p-6">
+        <div className="text-center space-y-4 max-w-md">
+          <div className="w-16 h-16 bg-yellow-500/10 rounded-full flex items-center justify-center mx-auto">
+            <span className="text-4xl">🔒</span>
+          </div>
+          <h1 className="text-2xl font-bold text-white">Autentifikatsiya talab qilinadi</h1>
+          <p className="text-gray-400 text-sm">
+            Display ekraniga ulanish uchun token kerak.
+            URL ga <code className="text-yellow-400 bg-gray-800 px-1 py-0.5 rounded text-xs">?token=DISPLAY_TOKEN</code> qo'shing
+            yoki kiosk sifatida login qiling.
+          </p>
+          <button
+            onClick={() => router.push("/login")}
+            className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-xl transition"
+          >
+            Login sahifasiga o'tish
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (loadingTickets && tickets.length === 0) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -92,6 +145,29 @@ export default function QueueDisplay() {
 
   return (
     <div className="min-h-screen bg-linear-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-slate-800">
+
+      {/* Audio unlock overlay — brauzer autoplay siyosati uchun majburiy */}
+      {!audioUnlocked && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm cursor-pointer"
+          onClick={unlockAudio}
+        >
+          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl p-10 text-center max-w-sm mx-4 pointer-events-none">
+            <div className="w-20 h-20 bg-blue-100 dark:bg-blue-900/40 rounded-full flex items-center justify-center mx-auto mb-6">
+              <Bell className="w-10 h-10 text-blue-600 dark:text-blue-400" />
+            </div>
+            <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-3">
+              Ovozli bildirishnoma
+            </h2>
+            <p className="text-slate-500 dark:text-slate-400 text-sm mb-8">
+              Navbat chaqirilganda ovoz eshitish uchun ekranga bosing
+            </p>
+            <div className="w-full py-4 bg-blue-600 text-white font-bold text-lg rounded-2xl shadow-lg animate-pulse">
+              Ekranga bosing
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Chaqiruv Modali */}
       {showModal && currentCall && (

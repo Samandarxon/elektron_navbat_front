@@ -10,10 +10,11 @@ import {
   useRef,
   useCallback,
 } from "react";
-import { DisplayTicket, backendStatusToDisplay, getQueue, getDoctors, type Doctor } from "@/app/lib/api/doctors";
+import { DisplayTicket, backendStatusToDisplay, getQueue, getDoctors, getDoctorsByBuilding, adaptTicket, type Doctor } from "@/app/lib/api/doctors";
+import { getKioskToken, getKioskRefreshToken, getDisplayToken, hasValidToken, refreshKioskToken, decodeJwtPayload } from "@/app/lib/api/auth";
+import { getRuntimeEnv } from "@/lib/runtime-env";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://25.1.1.129:8085";
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://25.1.1.129:8085";
+const WS_URL = getRuntimeEnv().WS_URL;
 
 // ─────────────────────────────────────────────────────────────
 // Types
@@ -37,6 +38,7 @@ interface QueueContextType {
   tickets: DisplayTicket[];
   isConnected: boolean;
   loadingTickets: boolean;
+  wsAuthError: boolean;
 
   // Real-time doktorlar ro'yxati (holat bilan)
   doctors: Doctor[];
@@ -123,12 +125,13 @@ function payloadToDisplayTicket(p: any): DisplayTicket {
     ticketNumber: p.queue_number ?? 0,
     queueDisplay: p.queue_display ?? `#${p.queue_number ?? 0}`,
     doctorName: p.doctor_name ?? "—",
-    specialization: p.department_name ?? "—",
+    specialization: p.specialization ?? p.department_name ?? "—",
     room: roomNumber ? `${roomNumber}-xona` : "—",
     roomNumber,
     status: backendStatusToDisplay(p.status ?? "waiting"),
     estimatedWait: p.estimated_wait ? `${p.estimated_wait} daqiqa` : "10 daqiqa",
     timestamp: new Date().toLocaleTimeString("uz-UZ"),
+    buildingId: p.building_id ?? undefined,
   };
 }
 
@@ -141,10 +144,31 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   const [showModal, setShowModal] = useState(false);
   const [pendingCalls, setPendingCalls] = useState<CurrentCall[]>([]);
 
+  // --- Building isolation: URL params → localStorage fallback ---
+  const computeBuildingId = useCallback((): string => {
+    if (typeof window === "undefined") return "";
+    // 1. URL: /display?building_id=UUID  (eng yuqori ustuvorlik)
+    const urlParam = new URLSearchParams(window.location.search).get("building_id");
+    if (urlParam) return urlParam;
+    // 2. localStorage fallback (eski /kiosk-config usuli)
+    try {
+      const cfg = localStorage.getItem("kioskConfig");
+      if (cfg) return (JSON.parse(cfg) as { buildingId?: string }).buildingId || "";
+    } catch { /* ignore */ }
+    return "";
+  }, []);
+
+  // activeBuildingId — reactive state. Login dan keyin client-navigatsiya bo'lsa
+  // ham (provider qayta mount bo'lmaydi) building id va auth holatini kuzatamiz.
+  const [activeBuildingId, setActiveBuildingId] = useState<string>("");
+  // authTick — token tayyor bo'lganda (login tugaganda) ortadi va fetch'larni qayta ishga tushiradi
+  const [authTick, setAuthTick] = useState(0);
+
   // --- Ticket list state ---
   const [tickets, setTickets] = useState<DisplayTicket[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [loadingTickets, setLoadingTickets] = useState(true);
+  const [wsAuthError, setWsAuthError] = useState(false);
 
   // --- Doctors state (real-time) ---
   const [doctors, setDoctors] = useState<Doctor[]>([]);
@@ -159,21 +183,75 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   const wsCallbackRef = useRef<((msg: any) => void) | null>(null);
 
   // ─────────────────────────────────────────────────────────
-  // Dastlabki ma'lumotlarni yuklash
+  // Auth holatini kuzatish: token tayyor bo'lguncha kutish
+  //
+  // QueueProvider root layout'da bo'lgani uchun /login sahifasida ham mount
+  // bo'ladi (token hali yo'q). Login tugab client-navigatsiya bo'lganda provider
+  // QAYTA mount bo'lmaydi — shu sababli mount-only effect ishlamay qolardi va
+  // doktorlar/tiketlar kelmas edi. Bu yerda token paydo bo'lishini kuzatamiz va
+  // building id ni reactive state'ga yozamiz, so'ng fetch'lar qayta ishga tushadi.
   // ─────────────────────────────────────────────────────────
   useEffect(() => {
-    getQueue()
-      .then((data) => setTickets(data))
-      .catch(() => {})
-      .finally(() => setLoadingTickets(false));
-  }, []);
+    const syncAuth = () => {
+      setActiveBuildingId(computeBuildingId());
+      if (hasValidToken()) {
+        setAuthTick((t) => t + 1);
+        return true;
+      }
+      return false;
+    };
+
+    // Darhol tekshiramiz; token bo'lmasa qisqa interval bilan ~10s kutamiz
+    if (!syncAuth()) {
+      let attempts = 0;
+      const id = setInterval(() => {
+        attempts++;
+        if (syncAuth() || attempts >= 20) clearInterval(id);
+      }, 500);
+      return () => clearInterval(id);
+    }
+  }, [computeBuildingId]);
+
+  // Boshqa tab/sahifada login yoki kioskConfig o'zgarsa — qayta sinxronlash
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === "kioskConfig" || e.key === "kiosk_access_token" || e.key === null) {
+        setActiveBuildingId(computeBuildingId());
+        if (hasValidToken()) setAuthTick((t) => t + 1);
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [computeBuildingId]);
+
+  // ─────────────────────────────────────────────────────────
+  // Active ticketlar endi FAQAT WebSocket orqali keladi:
+  //   • ulanishda backend "QUEUE_SNAPSHOT" yuboradi (binoga filtrlangan)
+  //   • keyin TICKET_CREATED / CALLED / UPDATED ... eventlari yangilaydi
+  // Shuning uchun bu yerda HTTP getQueue chaqirilmaydi (polling ham yo'q).
+  // loadingTickets WS ulanishi/snapshot'ida false bo'ladi.
+  // ─────────────────────────────────────────────────────────
 
   useEffect(() => {
-    getDoctors()
-      .then((data) => setDoctors(data))
-      .catch(() => {})
+    if (authTick === 0 || !hasValidToken()) {
+      if (authTick === 0) setLoadingDoctors(false);
+      return;
+    }
+    console.log("[QueueContext] doktorlar yuklash boshlandi, building_id:", activeBuildingId || "yo'q");
+    setLoadingDoctors(true);
+    const load = activeBuildingId
+      ? getDoctorsByBuilding(activeBuildingId)
+      : getDoctors();
+    load
+      .then((data) => {
+        setDoctors(data);
+        console.log("[QueueContext] doktorlar yuklandi:", data.length, "ta");
+      })
+      .catch((err) => {
+        console.warn("[QueueContext] doctors fetch xatolik:", err.message);
+      })
       .finally(() => setLoadingDoctors(false));
-  }, []);
+  }, [authTick, activeBuildingId]);
 
   // ─────────────────────────────────────────────────────────
   // Audio queue — localStorage dan yuklash
@@ -280,9 +358,11 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     setShowModal(true);
     await removeFirstCallFromStorage();
     setPendingCalls(storageCalls.slice(1));
+    // Audio'ni imkon qadar tez boshlaymiz (admin panel bilan kechikishni kamaytirish).
+    // 150ms — modal render bo'lishiga yetarli, lekin sezilarli lag bermaydi.
     setTimeout(() => {
       playNotificationSound(nextCall.ticketNumber, nextCall.room);
-    }, 500);
+    }, 150);
     timeoutRef.current = setTimeout(() => finishCurrentCall(), 8000);
   };
 
@@ -304,7 +384,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       const updated = readCallsFromStorage();
       setPendingCalls(updated);
       if (!isProcessingRef.current && !currentCall && !showModal) {
-        setTimeout(() => processQueue(), 300);
+        setTimeout(() => processQueue(), 50);
       }
     }
   };
@@ -319,7 +399,22 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       const p = msg?.payload;
       if (!p) return;
 
+      // Building isolation: agar kiosk bino bilan sozlangan bo'lsa,
+      // faqat o'sha binoga tegishli ticketlarni ko'rsatish
+      const kioskBuildingId = activeBuildingId;
+      const ticketBuildingId = p.building_id || "";
+      if (kioskBuildingId && ticketBuildingId && kioskBuildingId !== ticketBuildingId) return;
+
       switch (msg.type) {
+        case "QUEUE_SNAPSHOT": {
+          // Ulanishda backend yuborgan boshlang'ich active-ticketlar ro'yxati
+          // (binoga filtrlangan). HTTP polling o'rnini bosadi.
+          const list = Array.isArray(p.tickets) ? p.tickets : [];
+          setTickets(list.map(adaptTicket));
+          setLoadingTickets(false);
+          break;
+        }
+
         case "TICKET_CREATED":
           setTickets((prev) => {
             if (prev.some((t) => t.id === p.ticket_id)) return prev;
@@ -334,8 +429,17 @@ export function QueueProvider({ children }: { children: ReactNode }) {
               t.id === p.ticket_id ? { ...t, status: "in-progress" as const } : t
             )
           );
-          // Audio e'lon
-          triggerCall(p.queue_number ?? 0, p.room_number ?? "");
+          // Brauzer audiosi + animatsiya FAQAT display/queueDisplay sahifalarida.
+          // Kiosk (elektronNavbat) sahifasida chalmaymiz — aks holda kiosk
+          // mashinasida POS80 drayveri (backend notifyKioskAudio) bilan birga
+          // OVOZ IKKI MARTA eshitilardi. Kioskda faqat POS80 chaladi.
+          if (
+            typeof window !== "undefined" &&
+            (window.location.pathname.startsWith("/display") ||
+              window.location.pathname.startsWith("/queueDisplay"))
+          ) {
+            triggerCall(p.queue_number ?? 0, p.room_number ?? "");
+          }
           break;
 
         case "TICKET_IN_PROGRESS":
@@ -366,10 +470,10 @@ export function QueueProvider({ children }: { children: ReactNode }) {
           break;
 
         case "QUEUE_UPDATED":
-          // To'liq qayta yuklash
-          getQueue()
+          if (!hasValidToken()) break;
+          getQueue(kioskBuildingId || undefined)
             .then((data) => setTickets(data))
-            .catch(() => {});
+            .catch((err) => { console.warn("[WS:QUEUE_UPDATED] fetch xatolik:", err.message); });
           break;
 
         case "TICKET_UPDATED":
@@ -403,7 +507,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
         }
       }
     };
-  }, [triggerCall]);
+  }, [triggerCall, activeBuildingId]);
 
   // ─────────────────────────────────────────────────────────
   // WebSocket ulanish
@@ -412,14 +516,35 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
     if (wsRef.current?.readyState === WebSocket.CONNECTING) return;
 
-    const wsEndpoint = `${WS_URL}/api/v1/ws/public`;
+    // Token: URL ?token= (display_token) > localStorage display_token > kiosk token
+    let token = "";
+    if (typeof window !== "undefined") {
+      const urlToken = new URLSearchParams(window.location.search).get("token");
+      token = urlToken || getDisplayToken() || getKioskToken() || "";
+    }
+
+    if (!token) {
+      console.warn("[WS] token yo'q — WebSocket ulanish bekor qilindi");
+      setWsAuthError(true);
+      setIsConnected(false);
+      setLoadingTickets(false);
+      return;
+    }
+
+    setWsAuthError(false);
+    const wsEndpoint = `${WS_URL}/api/v1/ws/public?token=${encodeURIComponent(token)}`;
+    console.log("[WS] ulanish boshlandi:", wsEndpoint.replace(/token=.*/, "token=***"));
 
     try {
       const ws = new WebSocket(wsEndpoint);
       wsRef.current = ws;
 
       ws.onopen = () => {
+        console.log("[WS] ulandi ✓");
         setIsConnected(true);
+        // Snapshot kelguncha kutamiz, lekin spinner abadiy qotmasin —
+        // ulanish bo'lgach yuklanish holatini yopamiz (snapshot ham yangilaydi).
+        setLoadingTickets(false);
         if (reconnectTimerRef.current) {
           clearTimeout(reconnectTimerRef.current);
           reconnectTimerRef.current = null;
@@ -435,18 +560,29 @@ export function QueueProvider({ children }: { children: ReactNode }) {
         } catch {}
       };
 
-      ws.onclose = () => {
+      ws.onclose = (event: CloseEvent) => {
         setIsConnected(false);
         wsRef.current = null;
-        // 3 soniyada qayta ulanish
-        reconnectTimerRef.current = setTimeout(() => connectWebSocket(), 3000);
+        // 4001 = session_replaced — backend yangi connection evict qildi, reconnect qilmaymiz
+        if (event.code === 4001) {
+          console.log("[WS] session_replaced (4001) — reconnect bekor qilindi");
+          return;
+        }
+        if (!hasValidToken()) {
+          console.warn("[WS] token yo'q — qayta ulanish bekor qilindi");
+          return;
+        }
+        console.log(`[WS] uzildi (${event.code}) — 5 soniyada qayta ulanish`);
+        reconnectTimerRef.current = setTimeout(() => connectWebSocket(), 5000);
       };
 
-      ws.onerror = () => {
+      ws.onerror = (e) => {
+        console.warn("[WS] xatolik:", e);
         ws.close();
       };
     } catch {
-      reconnectTimerRef.current = setTimeout(() => connectWebSocket(), 3000);
+      if (!hasValidToken()) return;
+      reconnectTimerRef.current = setTimeout(() => connectWebSocket(), 5000);
     }
   }, []);
 
@@ -460,6 +596,53 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       }
     };
   }, [connectWebSocket]);
+
+  // ─────────────────────────────────────────────────────────
+  // Proaktiv token yangilash (avtomatik refresh)
+  //
+  // Access token muddati tugaganda (yoki tugashiga oz qolganda) refresh token
+  // orqali yangi access token olamiz. Aks holda token o'lganda hasValidToken()
+  // false bo'lib polling/WS/doktorlar yuklash to'xtab qolardi. Bu yerda har
+  // daqiqada tekshirib, kerak bo'lsa yangilaymiz — display/kiosk uzluksiz ishlaydi.
+  // ─────────────────────────────────────────────────────────
+  useEffect(() => {
+    let cancelled = false;
+
+    const ensureFreshToken = async () => {
+      if (typeof window === "undefined") return;
+      const refresh = getKioskRefreshToken();
+      if (!refresh) return; // refresh token yo'q — yangilab bo'lmaydi
+
+      const token = getKioskToken();
+      let needRefresh = !token;
+      if (token) {
+        try {
+          const exp = (decodeJwtPayload(token).exp as number) || 0;
+          // 2 daqiqadan kam qolgan yoki tugagan bo'lsa — yangilaymiz
+          needRefresh = exp * 1000 - Date.now() < 2 * 60 * 1000;
+        } catch {
+          needRefresh = true;
+        }
+      }
+      if (!needRefresh) return;
+
+      const fresh = await refreshKioskToken();
+      if (fresh && !cancelled) {
+        console.log("[Auth] token avtomatik yangilandi");
+        // Bog'liq mexanizmlarni qayta tiklash
+        setActiveBuildingId(computeBuildingId());
+        setAuthTick((t) => t + 1);   // doctors/tickets refetch
+        connectWebSocket();          // WS qayta ulanish (token o'lib uzilgan bo'lsa)
+      }
+    };
+
+    ensureFreshToken();
+    const id = setInterval(ensureFreshToken, 60 * 1000); // har daqiqa
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [computeBuildingId, connectWebSocket]);
 
   // Cleanup
   useEffect(() => {
@@ -479,6 +662,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
         tickets,
         isConnected,
         loadingTickets,
+        wsAuthError,
         doctors,
         loadingDoctors,
       }}

@@ -4,21 +4,35 @@ import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Clock, Calendar, ArrowLeft, Sun, Moon, X, Printer, Loader2 } from "lucide-react";
+import { Clock, Calendar, ArrowLeft, Sun, Moon, X, Printer, Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import { addToQueue, type Doctor } from "@/app/lib/api/doctors";
 import { useQueue } from "@/contexts/queueContext";
+import { getRuntimeEnv } from "@/lib/runtime-env";
 
 export type { Doctor };
 
-const PRINT_URL =
-  process.env.NEXT_PUBLIC_PRINTER_URL
-    ? `${process.env.NEXT_PUBLIC_PRINTER_URL}/print-ticket`
-    : "http://localhost:8080/print-ticket";
+const { PRINTER_URL, PRINTER_API_KEY } = getRuntimeEnv();
+const PRINT_URL = `${PRINTER_URL}/print-ticket`;
 
-const PRINTER_API_KEY =
-  process.env.NEXT_PUBLIC_PRINTER_API_KEY ||
-  "SECRET-PRINTER-KEY-b21ecca4618d929c6f24e0f7245ca7b50740f6509e455f3b1c165d70";
+function getUrlParam(key: string): string {
+  if (typeof window === "undefined") return "";
+  return new URLSearchParams(window.location.search).get(key) || "";
+}
+
+function getKioskId(): string {
+  return getUrlParam("kiosk_id");
+}
+
+function getBuildingId(): string {
+  const fromUrl = getUrlParam("building_id");
+  if (fromUrl) return fromUrl;
+  try {
+    const cfg = localStorage.getItem("kioskConfig");
+    if (cfg) return (JSON.parse(cfg) as { buildingId?: string }).buildingId || "";
+  } catch { /* ignore */ }
+  return "";
+}
 
 export default function ElektronNavbat() {
   const { doctors, loadingDoctors } = useQueue();
@@ -27,6 +41,23 @@ export default function ElektronNavbat() {
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
   const [printing, setPrinting] = useState(false);
+  // Chek chiqarish natijasi haqida chiroyli bildirishnoma (success/error)
+  const [feedback, setFeedback] = useState<{
+    kind: "success" | "error";
+    queueDisplay?: string;
+    room?: string;
+    message?: string;
+  } | null>(null);
+  const kioskId = getKioskId();
+  const buildingId = getBuildingId();
+
+  const homeHref = (() => {
+    const params = new URLSearchParams();
+    if (buildingId) params.set("building_id", buildingId);
+    if (kioskId) params.set("kiosk_id", kioskId);
+    const qs = params.toString();
+    return qs ? `/?${qs}` : "/";
+  })();
 
   useEffect(() => {
     const savedTheme = (localStorage.getItem("theme") as "light" | "dark") || "light";
@@ -38,6 +69,14 @@ export default function ElektronNavbat() {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // Bildirishnomani avtomatik yopish (success 5s, error 6s)
+  useEffect(() => {
+    if (!feedback) return;
+    const ms = feedback.kind === "success" ? 5000 : 6000;
+    const t = setTimeout(() => setFeedback(null), ms);
+    return () => clearTimeout(t);
+  }, [feedback]);
 
   const toggleTheme = () => {
     const newTheme = theme === "light" ? "dark" : "light";
@@ -58,8 +97,12 @@ export default function ElektronNavbat() {
     setPrinting(true);
 
     try {
-      // 1. Backendda haqiqiy ticket yaratish
-      const ticket = await addToQueue({ doctor_id: selectedDoctor.id });
+      // 1. Backendda haqiqiy ticket yaratish (kiosk_id bo'lsa backend print yuboradi)
+      const ticket = await addToQueue({
+        doctor_id: selectedDoctor.id,
+        kiosk_id: kioskId || undefined,
+        building_id: buildingId || undefined,
+      });
 
       // 2. Printer uchun ma'lumot
       const printData = {
@@ -72,29 +115,45 @@ export default function ElektronNavbat() {
         status: "waiting",
       };
 
-      // 3. POS80 printerga yuborish
-      try {
-        const printRes = await fetch(PRINT_URL, {
-          method: "POST",
-          headers: {
-            "X-API-Key": PRINTER_API_KEY,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(printData),
-        });
-        if (!printRes.ok) {
-          console.warn(`Printer xatosi: ${printRes.status} — ticket yaratildi lekin chop etilmadi`);
+      // 3. Print: kiosk_id bo'lsa backend o'zi yuboradi,
+      //    bo'lmasa (eski konfiguratsiya) to'g'ridan localhost ga yuboramiz
+      if (!kioskId) {
+        try {
+          const printRes = await fetch(PRINT_URL, {
+            method: "POST",
+            headers: {
+              "X-API-Key": PRINTER_API_KEY,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(printData),
+          });
+          if (!printRes.ok) {
+            console.warn(`Printer xatosi: ${printRes.status} — ticket yaratildi lekin chop etilmadi`);
+          }
+        } catch {
+          console.warn("Printer ulanmagan. Ticket yaratildi:", ticket.queue_display);
         }
-      } catch {
-        // Printer ulanmagan bo'lsa ham ticket yaratildi — xatoni yutamiz
-        console.warn("Printer ulanmagan. Ticket yaratildi:", ticket.queue_display);
       }
 
+      // Muvaffaqiyat: tasdiqlash modalini yopib, chiroyli bildirishnoma ko'rsatamiz
+      const room = selectedDoctor.roomNumber;
       setShowPrintModal(false);
       setSelectedDoctor(null);
+      setFeedback({
+        kind: "success",
+        queueDisplay: ticket.queue_display,
+        room,
+      });
       // Doktorlar ro'yxatini yangilash shart emas — backend event jo'natadi
     } catch (error: any) {
-      alert(error?.message || "Navbat olishda xatolik. Qayta urinib ko'ring.");
+      // Xatolik: tasdiqlash modalini ham yopamiz va xato bildirishnomasini ko'rsatamiz
+      setShowPrintModal(false);
+      setSelectedDoctor(null);
+      setFeedback({
+        kind: "error",
+        message:
+          error?.message || "Navbat olishda xatolik yuz berdi. Iltimos, qayta urinib ko'ring.",
+      });
     } finally {
       setPrinting(false);
     }
@@ -119,6 +178,84 @@ export default function ElektronNavbat() {
 
   return (
     <div className="min-h-screen bg-linear-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-slate-800">
+      {/* Natija bildirishnomasi (success / error) */}
+      {feedback && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          onClick={() => setFeedback(null)}
+        >
+          <div
+            className="relative w-full max-w-md rounded-3xl bg-white dark:bg-slate-800 shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden animate-in fade-in zoom-in-95 duration-300"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Tepa rangli chiziq */}
+            <div
+              className={`h-2 w-full ${feedback.kind === "success" ? "bg-emerald-500" : "bg-red-500"}`}
+            />
+            <button
+              onClick={() => setFeedback(null)}
+              className="absolute top-4 right-4 rounded-full p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+              aria-label="Yopish"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="px-8 py-9 text-center">
+              {feedback.kind === "success" ? (
+                <>
+                  <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/40">
+                    <CheckCircle2 className="h-12 w-12 text-emerald-600 dark:text-emerald-400" />
+                  </div>
+                  <h2 className="text-2xl font-black text-slate-900 dark:text-white">
+                    Chek chiqarildi
+                  </h2>
+                  <p className="mt-1 text-slate-500 dark:text-slate-400">
+                    Navbatingiz muvaffaqiyatli rasmiylashtirildi
+                  </p>
+
+                  <div className="mt-6 rounded-2xl bg-slate-50 dark:bg-slate-700/40 px-6 py-5">
+                    <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
+                      Sizning navbat raqamingiz
+                    </p>
+                    <p className="mt-1 text-5xl font-black tracking-tight text-blue-600 dark:text-blue-400">
+                      {feedback.queueDisplay}
+                    </p>
+                    {feedback.room && (
+                      <p className="mt-3 text-lg font-semibold text-slate-700 dark:text-slate-200">
+                        {feedback.room}-xona
+                      </p>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/40">
+                    <AlertTriangle className="h-12 w-12 text-red-600 dark:text-red-400" />
+                  </div>
+                  <h2 className="text-2xl font-black text-slate-900 dark:text-white">
+                    Xatolik yuz berdi
+                  </h2>
+                  <p className="mt-3 text-base text-slate-600 dark:text-slate-300 leading-relaxed">
+                    {feedback.message}
+                  </p>
+                </>
+              )}
+
+              <Button
+                onClick={() => setFeedback(null)}
+                className={`mt-7 w-full py-6 text-base font-semibold rounded-xl ${
+                  feedback.kind === "success"
+                    ? "bg-emerald-600 hover:bg-emerald-500"
+                    : "bg-slate-700 hover:bg-slate-600"
+                } text-white`}
+              >
+                Yopish
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Tasdiqlash Modali */}
       {showPrintModal && selectedDoctor && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
@@ -208,7 +345,7 @@ export default function ElektronNavbat() {
       <div className="fixed top-0 left-0 right-0 z-50 p-4 bg-linear-to-r from-blue-900 via-blue-700 to-cyan-600 dark:from-slate-900 dark:via-slate-800 dark:to-slate-700 shadow-lg border-b border-white/10 dark:border-slate-600/30">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Link href="/">
+            <Link href={homeHref}>
               <Button
                 variant="outline"
                 size="icon"
